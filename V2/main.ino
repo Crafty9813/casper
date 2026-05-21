@@ -1,0 +1,364 @@
+#include <Servo.h>
+#include <math.h>
+
+Servo abFL;
+Servo hipFL;
+Servo kneeFL;
+
+Servo abFR;
+Servo hipFR;
+Servo kneeFR;
+
+Servo abBL;
+Servo hipBL;
+Servo kneeBL;
+
+Servo abBR;
+Servo hipBR;
+Servo kneeBR;
+
+#define joy_translate 18
+#define joy_turn 19
+#define joy_strafe 20
+#define joy_mode 21
+
+// Offsets for forward movement
+float hipOffsetF = 40; // 40
+float kneeOffsetF = 66; // 70
+
+// Offsets for backwards movement
+float hipOffsetB = 30; //30
+float kneeOffsetB = 66; //66
+
+// Offsets for turning
+float hipOffsetT = 40; //30 OLD
+float kneeOffsetT = 70; // 66 OLD
+
+float currHipOffset;
+float currKneeOffset;
+
+// Unit: mm
+const float l1 = 143.0; // Femur length
+const float l2 = 125.0; // Tibia length
+
+const float r2d = 57.2957795; // Rad to deg
+
+float timeStep = 0.0;
+float stepSpeed = 1.2; // Gait speed
+
+float ellipseWidth = 100.0; // Step length
+float ellipseHeight = 10.0; // How high foot lifts
+
+const float startX = 0.0; // Center X
+const float startZ = -100.0; // OLD: -90
+
+volatile uint32_t throttleStart = 0;
+volatile int throttlePulse = 1500;
+
+volatile uint32_t turnStart = 0;
+volatile int turnPulse = 1500;
+
+volatile uint32_t strafeStart = 0;
+volatile int strafePulse = 1500;
+
+volatile uint32_t modeStart = 0;
+volatile int modePulse = 1000;
+
+float filteredThrottle = 1500;
+float filteredTurn = 1500;
+float filteredStrafe = 1500;
+float filteredMode = 1000;
+
+bool isIdle = true;
+
+const float PHASE_FL = 0.0;
+const float PHASE_FR = PI;
+const float PHASE_BR = 0.0;
+const float PHASE_BL = PI;
+
+const float swingPhase = PI;
+
+void setup() {
+  abFL.attach(10);
+  hipFL.attach(9);
+  kneeFL.attach(8);
+
+  abFR.attach(22);
+  hipFR.attach(23);
+  kneeFR.attach(24);
+
+  abBR.attach(51);
+  hipBR.attach(52);
+  kneeBR.attach(53);
+
+  abBL.attach(13);
+  hipBL.attach(12);
+  kneeBL.attach(11);
+
+  pinMode(joy_translate, INPUT);
+  pinMode(joy_turn, INPUT);
+  pinMode(joy_strafe, INPUT);
+  pinMode(joy_mode, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(joy_translate), throttleISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(joy_turn), steeringISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(joy_strafe), strafeISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(joy_mode), modeISR, CHANGE);
+  
+}
+
+static uint32_t prevTime = micros();
+
+void loop() {
+  uint32_t now = micros();
+  float dt = (now - prevTime) / 1000000.0f; // Time elapsed
+  prevTime = now;
+
+  if (dt > 0.02f) dt = 0.02f;
+  
+  noInterrupts();
+  int rawThrottle = throttlePulse;
+  int rawTurn = turnPulse;
+  int rawStrafe = strafePulse;
+  int rawMode = modePulse;
+  interrupts();
+
+  // LPFs for joysticks
+  filteredThrottle = 0.9 * filteredThrottle + 0.1 * rawThrottle;
+  int t = (int)filteredThrottle;
+
+  filteredTurn = 0.7 * filteredTurn + 0.3 * rawTurn;
+  int turn = (int)filteredTurn;
+
+  filteredStrafe = 0.9 * filteredStrafe + 0.1 * rawStrafe;
+  int strafe = (int)filteredStrafe;
+
+  filteredMode = 0.9 * filteredMode + 0.1 * rawMode;
+  int mode = (int)filteredMode;
+
+  bool forward = (t < 1450);
+  bool backward = (t > 1550);
+  bool turnLeft = (turn < 1400);
+  bool turnRight = (turn > 1600);
+  bool strafeLeft = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband
+  bool strafeRight = (strafe < 1350);
+  bool obstacleMode = mode > 1500;
+
+  if (forward || backward || turnLeft || turnRight || strafeLeft || strafeRight) {
+    isIdle = false;
+
+    timeStep += stepSpeed * TWO_PI * dt;
+
+    if (timeStep >= TWO_PI) timeStep -= TWO_PI;
+
+    // Direction multipliers
+    // +1 = forward gait
+    // -1 = backward gait
+    int dirFL = 0;
+    int dirFR = 0;
+    int dirBL = 0;
+    int dirBR = 0;
+
+    float strideFL = 1;
+    float strideFR = 1;
+    float strideBL = 1;
+    float strideBR = 1;
+
+    float latFL = 0;
+    float latFR = 0;
+    float latBL = 0;
+    float latBR = 0;
+
+    if (forward) {
+      dirFL = 1;
+      dirFR = 1;
+      dirBL = 1;
+      dirBR = 1;
+
+    } else if (backward) {
+        dirFL = -1;
+        dirFR = -1;
+        dirBL = -1;
+        dirBR = -1;
+    }
+
+    // Arc steering via varied stride len
+    if (turnLeft && forward) {
+      dirFL = dirFR = dirBL = dirBR = 1;
+      strideFL = 0.3;
+      strideBL = 0.3;
+      strideFR = 1.0;
+      strideBR = 1.0;
+
+    } else if (turnRight && forward) {
+        dirFL = dirFR = dirBL = dirBR = 1;
+        strideFL = 1.0;
+        strideBL = 1.0;
+        strideFR = 0.3;
+        strideBR = 0.3;
+    }
+
+    if (turnLeft && backward) {
+      dirFL = dirFR = dirBL = dirBR = -1;
+      strideFL = 1.0;
+      strideBL = 1.0;
+      strideFR = 0.3;
+      strideBR = 0.3;
+    } else if (turnRight && backward) {
+      dirFL = dirFR = dirBL = dirBR = -1;
+      strideFL = 0.3;
+      strideBL = 0.3;
+      strideFR = 1.0;
+      strideBR = 1.0;
+    }
+    
+    if (strafeLeft || strafeRight) {
+      float strafeDir = strafeLeft ? -1.0 : 1.0;
+
+      latFL = strafeDir * 15.0 * sin(timeStep + PHASE_FL);
+      latFR = strafeDir * 15.0 * sin(timeStep + PHASE_FR);
+      latBL = strafeDir * 15.0 * sin(timeStep + PHASE_BL);
+      latBR = strafeDir * 15.0 * sin(timeStep + PHASE_BR);
+    }
+
+    // Needa experiment with variable step height to go over obstacles
+    if (obstacleMode) {
+      ellipseHeight = 50;
+      ellipseWidth = 70;
+      stepSpeed = 0.8;
+      //hipOffsetF = 52;
+      //kneeOffsetF = 40;
+    } else {
+      ellipseHeight = 10;
+      stepSpeed = 1.2;
+      ellipseWidth = 100;
+      //hipOffsetF = 40;
+      //kneeOffsetF = 60;
+    }
+
+    if (forward) {
+      currHipOffset = hipOffsetF;
+      currKneeOffset = kneeOffsetF;
+    } else if (backward) {
+      currHipOffset = hipOffsetB;
+      currKneeOffset = kneeOffsetB;
+    } else { // Also for strafing...
+      currHipOffset = hipOffsetT;
+      currKneeOffset = kneeOffsetT;
+    }
+
+    moveLeg(abFL, hipFL, kneeFL, timeStep + PHASE_FL, dirFL, strideFL, latFL, currHipOffset, currKneeOffset);
+    moveLeg(abFR, hipFR, kneeFR, timeStep + PHASE_FR, dirFR, strideFR, latFR, currHipOffset, currKneeOffset);
+    moveLeg(abBL, hipBL, kneeBL, timeStep + PHASE_BL, dirBL, strideBL, latBL, currHipOffset, currKneeOffset);
+    moveLeg(abBR, hipBR, kneeBR, timeStep + PHASE_BR, dirBR, strideBR, latBR, currHipOffset, currKneeOffset);
+
+  }
+  else {
+    if (!isIdle) {
+      setAllServos(90);
+      isIdle = true;
+    }
+  }
+}
+
+void moveLeg(Servo& abd, Servo& hip, Servo& knee, float phase, int direction, float strideScale, float lateral, float hipOffset, float kneeOffset) {
+  float phaseNorm = fmod(phase, 2 * PI);
+
+  float x, z;
+
+  if (phaseNorm < swingPhase) {
+    float t = phaseNorm / swingPhase;
+
+    x = startX + direction * ellipseWidth * strideScale * (0.5 - t);
+
+    if (t < 0.5) {
+      z = startZ + ellipseHeight * (t * 2.0);
+    }
+    else {
+      z = startZ + ellipseHeight;
+    }
+    //z = startZ + ellipseHeight * sin(t * PI);
+
+  } else {
+    float t = (phaseNorm - swingPhase) / (2*PI-swingPhase);
+
+    x = startX + direction * (-ellipseWidth * 0.5 + ellipseWidth * (t * 0.9)) * strideScale;
+    //z = startZ - 10.0 * sin(t * PI);
+    z = startZ
+  }
+
+  // Strafe foot target
+  float y = lateral;
+
+  // Abduction angle
+  float abdAngle = atan2(y, -z) * r2d;
+
+  // Project into leg plane
+  float zProj = sqrt(y*y + z*z);
+
+  // IK
+  float L = sqrt(x*x + zProj * zProj);
+  L = constrain(L, 10, l1 + l2 - 5);
+
+  float val = (sq(l1) + sq(l2) - sq(L)) / (2 * l1 * l2);
+  val = constrain(val, -1, 1);
+  float A = acos(val);
+
+  float B = acos((sq(l1) + sq(L) - sq(l2)) / (2 * l1 * L)) + atan2(x, zProj);
+
+  float kneeAngle = A * r2d;
+  float hipAngle  = B * r2d;
+
+  abd.write(90 + abdAngle);
+
+  hip.write(180 - (hipAngle + hipOffset));
+  knee.write(kneeAngle + kneeOffset);
+}
+
+void throttleISR() {
+  if (digitalRead(joy_translate) == HIGH) {
+    throttleStart = micros();
+  } else {
+    throttlePulse = micros() - throttleStart;
+  }
+}
+
+void steeringISR() {
+  if (digitalRead(joy_turn) == HIGH) {
+    turnStart = micros();
+  } else {
+    turnPulse = micros() - turnStart;
+  }
+}
+
+void strafeISR() {
+  if (digitalRead(joy_strafe) == HIGH) {
+    strafeStart = micros();
+  } else {
+    strafePulse = micros() - strafeStart;
+  }
+}
+
+void modeISR() {
+  if (digitalRead(joy_mode) == HIGH) {
+    modeStart = micros();
+  } else {
+    modePulse = micros() - modeStart;
+  }
+}
+
+void setAllServos(int angle) {
+  hipFL.write(angle);
+  kneeFL.write(angle);
+  hipFR.write(angle);
+  kneeFR.write(angle);
+  hipBL.write(angle);
+  kneeBL.write(angle);
+  hipBR.write(angle);
+  kneeBR.write(angle);
+
+  abFL.write(90);
+  abFR.write(90);
+  abBL.write(90);
+  abBR.write(90);
+}
