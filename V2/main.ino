@@ -22,35 +22,35 @@ Servo kneeBR;
 #define joy_strafe 20
 #define joy_mode 21
 
-// Offsets for forward movement
-float hipOffsetF = 40; // 40
-float kneeOffsetF = 66; // 70
+// Offsets for forwards and turning
+float hipOffsetF = 45;
+float kneeOffsetF = 30;
 
-// Offsets for backwards movement
-float hipOffsetB = 30; //30
-float kneeOffsetB = 66; //66
+// Offsets for backwards
+float hipOffsetB = 50;
+float kneeOffsetB = 30;
 
-// Offsets for turning
-float hipOffsetT = 40; //30 OLD
-float kneeOffsetT = 70; // 66 OLD
+// Offsets for strafing
+float hipOffsetS = 40; // OLD: 45
+float kneeOffsetS = 45; // OLD: 30
 
 float currHipOffset;
 float currKneeOffset;
 
 // Unit: mm
 const float l1 = 143.0; // Femur length
-const float l2 = 125.0; // Tibia length
+const float l2 = 130.0; // Tibia length, added bigger feet
 
 const float r2d = 57.2957795; // Rad to deg
 
 float timeStep = 0.0;
 float stepSpeed = 1.2; // Gait speed
 
-float ellipseWidth = 100.0; // Step length
-float ellipseHeight = 10.0; // How high foot lifts
+float ellipseWidth = 115.0; // Step length
+float ellipseHeight = 15.0; // How high foot lifts
 
 const float startX = 0.0; // Center X
-const float startZ = -100.0; // OLD: -90
+const float startZ = -150.0;
 
 volatile uint32_t throttleStart = 0;
 volatile int throttlePulse = 1500;
@@ -77,6 +77,22 @@ const float PHASE_BR = 0.0;
 const float PHASE_BL = PI;
 
 const float swingPhase = PI;
+
+int lastAbFL = 90;
+int lastHipFL = 90;
+int lastKneeFL = 90;
+
+int lastAbFR = 90;
+int lastHipFR = 90;
+int lastKneeFR = 90;
+
+int lastAbBL = 90;
+int lastHipBL = 90;
+int lastKneeBL = 90;
+
+int lastAbBR = 90;
+int lastHipBR = 90;
+int lastKneeBR = 90;
 
 void setup() {
   abFL.attach(10);
@@ -127,7 +143,7 @@ void loop() {
   filteredThrottle = 0.9 * filteredThrottle + 0.1 * rawThrottle;
   int t = (int)filteredThrottle;
 
-  filteredTurn = 0.7 * filteredTurn + 0.3 * rawTurn;
+  filteredTurn = 0.9 * filteredTurn + 0.1 * rawTurn;
   int turn = (int)filteredTurn;
 
   filteredStrafe = 0.9 * filteredStrafe + 0.1 * rawStrafe;
@@ -136,11 +152,11 @@ void loop() {
   filteredMode = 0.9 * filteredMode + 0.1 * rawMode;
   int mode = (int)filteredMode;
 
-  bool forward = (t < 1450);
-  bool backward = (t > 1550);
+  bool forward = (t < 1430);
+  bool backward = (t > 1570);
   bool turnLeft = (turn < 1400);
   bool turnRight = (turn > 1600);
-  bool strafeLeft = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband
+  bool strafeLeft = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
   bool strafeRight = (strafe < 1350);
   bool obstacleMode = mode > 1500;
 
@@ -159,6 +175,10 @@ void loop() {
     int dirBL = 0;
     int dirBR = 0;
 
+    ellipseHeight = 15;
+    ellipseWidth = 115;
+    stepSpeed = 1.2;
+
     float strideFL = 1;
     float strideFR = 1;
     float strideBL = 1;
@@ -169,6 +189,15 @@ void loop() {
     float latBL = 0;
     float latBR = 0;
 
+    int moveDir = 0;
+    if (forward) moveDir = 1;
+    if (backward) moveDir = -1;
+
+    dirFL = dirFR = dirBL = dirBR = moveDir;
+
+    //if (forward || backward) stepSpeed = 1.2;
+
+    /*
     if (forward) {
       dirFL = 1;
       dirFR = 1;
@@ -182,8 +211,9 @@ void loop() {
         dirBR = -1;
     }
 
-    // Arc steering via varied stride len
+    // Arc steering
     if (turnLeft && forward) {
+      stepSpeed = 2;
       dirFL = dirFR = dirBL = dirBR = 1;
       strideFL = 0.3;
       strideBL = 0.3;
@@ -191,6 +221,7 @@ void loop() {
       strideBR = 1.0;
 
     } else if (turnRight && forward) {
+        stepSpeed = 2;
         dirFL = dirFR = dirBL = dirBR = 1;
         strideFL = 1.0;
         strideBL = 1.0;
@@ -199,52 +230,83 @@ void loop() {
     }
 
     if (turnLeft && backward) {
+      stepSpeed = 2;
       dirFL = dirFR = dirBL = dirBR = -1;
       strideFL = 1.0;
       strideBL = 1.0;
       strideFR = 0.3;
       strideBR = 0.3;
     } else if (turnRight && backward) {
+      stepSpeed = 2;
       dirFL = dirFR = dirBL = dirBR = -1;
       strideFL = 0.3;
       strideBL = 0.3;
       strideFR = 1.0;
       strideBR = 1.0;
+    }*/
+
+    if (moveDir != 0 && (turnLeft || turnRight)) {
+      //stepSpeed = 2.0;
+
+      float innerStride = 0.3;
+      float outerStride = 1;
+
+      bool leftInner;
+
+      if (moveDir > 0) {
+        // Forward
+        leftInner = turnLeft;
+      } else {
+        // Backward (steering reverses)
+        leftInner = turnRight;
+      }
+
+      strideFL = strideBL = leftInner ? innerStride : outerStride;
+      strideFR = strideBR = leftInner ? outerStride : innerStride;
     }
     
     if (strafeLeft || strafeRight) {
-      float strafeDir = strafeLeft ? -1.0 : 1.0;
+      ellipseHeight = 30;
+      stepSpeed = 2.2;
 
-      latFL = strafeDir * 15.0 * sin(timeStep + PHASE_FL);
-      latFR = strafeDir * 15.0 * sin(timeStep + PHASE_FR);
-      latBL = strafeDir * 15.0 * sin(timeStep + PHASE_BL);
-      latBR = strafeDir * 15.0 * sin(timeStep + PHASE_BR);
+      float strafeDir = strafeLeft ? -1.0f : 1.0f;
+
+      latFL = strafeDir * 20.0 * sin(timeStep + PHASE_FL);
+      latFR = strafeDir * 20.0 * sin(timeStep + PHASE_FR);
+      latBL = strafeDir * 20.0 * sin(timeStep + PHASE_BL);
+      latBR = strafeDir * 20.0 * sin(timeStep + PHASE_BR);
     }
 
-    // Needa experiment with variable step height to go over obstacles
+    if (moveDir == 0 && (turnLeft || turnRight)) {
+      ellipseHeight = 20;
+      stepSpeed = 2;
+
+      float turnDir = turnLeft ? -1.0f : 1.0f;
+      float amp = 20.0f;
+
+      latFL = -turnDir * amp * sin(timeStep + PHASE_FL);
+      latBL = -turnDir * amp * sin(timeStep + PHASE_BL);
+      latFR = turnDir * amp * sin(timeStep + PHASE_FR);
+      latBR = turnDir * amp * sin(timeStep + PHASE_BR);
+    }
+
     if (obstacleMode) {
-      ellipseHeight = 50;
-      ellipseWidth = 70;
-      stepSpeed = 0.8;
+      ellipseHeight = 100;
+      ellipseWidth = 30;
+      stepSpeed = 0.4;
       //hipOffsetF = 52;
       //kneeOffsetF = 40;
-    } else {
-      ellipseHeight = 10;
-      stepSpeed = 1.2;
-      ellipseWidth = 100;
-      //hipOffsetF = 40;
-      //kneeOffsetF = 60;
     }
 
-    if (forward) {
+    if (forward || turnLeft || turnRight) {
       currHipOffset = hipOffsetF;
       currKneeOffset = kneeOffsetF;
     } else if (backward) {
       currHipOffset = hipOffsetB;
       currKneeOffset = kneeOffsetB;
-    } else { // Also for strafing...
-      currHipOffset = hipOffsetT;
-      currKneeOffset = kneeOffsetT;
+    } else { // For strafing
+      currHipOffset = hipOffsetS;
+      currKneeOffset = kneeOffsetS;
     }
 
     moveLeg(abFL, hipFL, kneeFL, timeStep + PHASE_FL, dirFL, strideFL, latFL, currHipOffset, currKneeOffset);
@@ -261,6 +323,13 @@ void loop() {
   }
 }
 
+void writeServoDeadband(Servo& s, int target, int& lastTarget, int deadband = 2) {
+  if (abs(target - lastTarget) >= deadband) {
+    s.write(target);
+    lastTarget = target;
+  }
+}
+
 void moveLeg(Servo& abd, Servo& hip, Servo& knee, float phase, int direction, float strideScale, float lateral, float hipOffset, float kneeOffset) {
   float phaseNorm = fmod(phase, 2 * PI);
 
@@ -271,20 +340,21 @@ void moveLeg(Servo& abd, Servo& hip, Servo& knee, float phase, int direction, fl
 
     x = startX + direction * ellipseWidth * strideScale * (0.5 - t);
 
+    /*
     if (t < 0.5) {
       z = startZ + ellipseHeight * (t * 2.0);
     }
     else {
       z = startZ + ellipseHeight;
-    }
-    //z = startZ + ellipseHeight * sin(t * PI);
+    }*/
+    z = startZ + ellipseHeight * sin(t * PI);
 
   } else {
     float t = (phaseNorm - swingPhase) / (2*PI-swingPhase);
 
-    x = startX + direction * (-ellipseWidth * 0.5 + ellipseWidth * (t * 0.9)) * strideScale;
-    //z = startZ - 10.0 * sin(t * PI);
-    z = startZ
+    x = startX + direction * (-ellipseWidth * 0.5 + ellipseWidth * t) * strideScale;
+    z = startZ - 15.0 * sin(t * PI); // NEEDED to generate friction
+    //z = startZ;
   }
 
   // Strafe foot target
@@ -309,10 +379,43 @@ void moveLeg(Servo& abd, Servo& hip, Servo& knee, float phase, int direction, fl
   float kneeAngle = A * r2d;
   float hipAngle  = B * r2d;
 
-  abd.write(90 + abdAngle);
+  int abCmd = 90 + abdAngle;
+  int hipCmd = 180 - (hipAngle + hipOffset);
+  int kneeCmd = kneeAngle + kneeOffset;
 
-  hip.write(180 - (hipAngle + hipOffset));
-  knee.write(kneeAngle + kneeOffset);
+  int* lastAb;
+  int* lastHip;
+  int* lastKnee;
+
+  if (&hip == &hipFL) {
+    lastAb = &lastAbFL;
+    lastHip = &lastHipFL;
+    lastKnee = &lastKneeFL;
+  }
+  else if (&hip == &hipFR) {
+    lastAb = &lastAbFR;
+    lastHip = &lastHipFR;
+    lastKnee = &lastKneeFR;
+  }
+  else if (&hip == &hipBL) {
+    lastAb = &lastAbBL;
+    lastHip = &lastHipBL;
+    lastKnee = &lastKneeBL;
+  }
+  else {
+    lastAb = &lastAbBR;
+    lastHip = &lastHipBR;
+    lastKnee = &lastKneeBR;
+  }
+
+  //abd.write(90 + abdAngle);
+
+  writeServoDeadband(abd, abCmd, *lastAb, 2);
+  writeServoDeadband(hip, hipCmd, *lastHip, 2);
+  writeServoDeadband(knee, kneeCmd, *lastKnee, 2);
+
+  //hip.write(180 - (hipAngle + hipOffset));
+  //knee.write(kneeAngle + kneeOffset);
 }
 
 void throttleISR() {
