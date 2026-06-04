@@ -27,7 +27,7 @@ float hipOffsetF = 45;
 float kneeOffsetF = 30;
 
 // Offsets for backwards
-float hipOffsetB = 50;
+float hipOffsetB = 45;
 float kneeOffsetB = 30;
 
 // Offsets for strafing
@@ -44,7 +44,7 @@ const float l2 = 130.0; // Tibia length, added bigger feet
 const float r2d = 57.2957795; // Rad to deg
 
 float timeStep = 0.0;
-float stepSpeed = 1.2; // Gait speed
+float stepSpeed; // Gait speed
 
 float ellipseWidth = 115.0; // Step length
 float ellipseHeight = 15.0; // How high foot lifts
@@ -142,18 +142,22 @@ void loop() {
   // LPFs for joysticks
   filteredThrottle = 0.9 * filteredThrottle + 0.1 * rawThrottle;
   int t = (int)filteredThrottle;
+  float throttleMag = abs(t - 1500);
+  throttleMag = max(0.0f, throttleMag - 50.0f);
 
   filteredTurn = 0.9 * filteredTurn + 0.1 * rawTurn;
   int turn = (int)filteredTurn;
 
   filteredStrafe = 0.9 * filteredStrafe + 0.1 * rawStrafe;
   int strafe = (int)filteredStrafe;
+  float strafeMag = abs(strafe - 1500);
+  strafeMag = max(0.0f, strafeMag - 150.0f);
 
   filteredMode = 0.9 * filteredMode + 0.1 * rawMode;
   int mode = (int)filteredMode;
 
-  bool forward = (t < 1430);
-  bool backward = (t > 1570);
+  bool forward = (t < 1450);
+  bool backward = (t > 1550);
   bool turnLeft = (turn < 1400);
   bool turnRight = (turn > 1600);
   bool strafeLeft = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
@@ -162,6 +166,19 @@ void loop() {
 
   if (forward || backward || turnLeft || turnRight || strafeLeft || strafeRight) {
     isIdle = false;
+
+    // Speed logic
+    if (forward || backward) {
+      if (forward) {
+        stepSpeed = 1.0f + (throttleMag / 450.0f) * 0.8f;
+      } else {
+        stepSpeed = 0.9f + (throttleMag / 450.0f) * 0.5f;
+      }
+    } else if (strafeLeft || strafeRight) {
+      stepSpeed = 1.0f + (strafeMag / 350.0f) * 0.6f;
+    }
+
+    stepSpeed = constrain(stepSpeed, 0.9f, 1.8f);
 
     timeStep += stepSpeed * TWO_PI * dt;
 
@@ -177,7 +194,7 @@ void loop() {
 
     ellipseHeight = 15;
     ellipseWidth = 115;
-    stepSpeed = 1.2;
+    //stepSpeed = 1.2;
 
     float strideFL = 1;
     float strideFR = 1;
@@ -267,7 +284,7 @@ void loop() {
     
     if (strafeLeft || strafeRight) {
       ellipseHeight = 30;
-      stepSpeed = 2.2;
+      //stepSpeed = 2.2;
 
       float strafeDir = strafeLeft ? -1.0f : 1.0f;
 
