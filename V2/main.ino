@@ -163,6 +163,7 @@ void loop() {
   bool strafeLeft = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
   bool strafeRight = (strafe < 1350);
   bool obstacleMode = mode > 1500;
+  // bool poseMode = mode > 1500;
 
   if (forward || backward || turnLeft || turnRight || strafeLeft || strafeRight) {
     isIdle = false;
@@ -183,6 +184,12 @@ void loop() {
     timeStep += stepSpeed * TWO_PI * dt;
 
     if (timeStep >= TWO_PI) timeStep -= TWO_PI;
+
+    /* POSE MODE
+    if (!poseMode) {
+      timeStep += stepSpeed * TWO_PI * dt;
+      if (timeStep >= TWO_PI) timeStep -= TWO_PI;
+    }*/
 
     // Direction multipliers
     // +1 = forward gait
@@ -314,6 +321,23 @@ void loop() {
       //hipOffsetF = 52;
       //kneeOffsetF = 40;
     }
+
+    /* FOR POSE MODE
+    if (poseMode) {
+      float yawPose = 40.0f;
+
+      if (turnLeft) {
+        latFL = yawPose;
+        latFR = yawPose;
+        latBL = -yawPose;
+        latBR = -yawPose;
+      } else if (turnRight) {
+        latFL = -yawPose;
+        latFR = -yawPose;
+        latBL = yawPose;
+        latBR = yawPose;
+      }
+    }*/
 
     if (forward || turnLeft || turnRight) {
       currHipOffset = hipOffsetF;
