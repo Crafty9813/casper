@@ -172,14 +172,14 @@ void moveLeg(Servo& hip, Servo& knee, float phase, int direction, float hipOffse
   if (phaseNorm < swingPhase) {
     float t = phaseNorm / swingPhase;
 
-    x = startX + direction * ellipseWidth * (0.5 - t);
-    y = startY + ellipseHeight * sin(t * PI);
+    x = startX - direction * ellipseWidth * (0.5 - t);
+    y = startY - ellipseHeight * sin(t * PI);
 
   } else {
     float t = (phaseNorm - swingPhase) / (2*PI-swingPhase);
 
-    x = startX + direction * (-ellipseWidth * 0.5 + ellipseWidth * (t * 0.9)); // reduce torque
-    y = startY - 10.0 * sin(t * PI);
+    x = startX - direction * (-ellipseWidth * 0.5 + ellipseWidth * (t * 0.9)); // reduce torque
+    y = startY + 10.0 * sin(t * PI);
   }
 
   // IK (loc)
