@@ -35,11 +35,11 @@ const float l2 = 125.0; // Tibia length
 const float r2d = 57.2957795; // Rad to deg
 
 float timeStep = 0.0;
-const float stepSpeed = 1.6; // Gait speed
+const float stepSpeed = 1.8; // Gait speed
 const float ellipseWidth = 85.0; // Step length
-const float ellipseHeight = 10.0; // How high foot lifts
+const float ellipseHeight = 120.0; // How high foot lifts
 const float startX = 0.0; // Center X
-const float startY = -70.0; // Center Y below hip
+const float startY = -60.0; // Center Y below hip
 
 volatile uint32_t throttleStart = 0;
 volatile int throttlePulse = 1500;
@@ -158,7 +158,7 @@ void loop() {
   }
   else {
     if (!isIdle) {
-      setAllServos(90);
+      setAllServos(70);
       isIdle = true;
     }
   }
@@ -179,7 +179,8 @@ void moveLeg(Servo& hip, Servo& knee, float phase, int direction, float hipOffse
     float t = (phaseNorm - swingPhase) / (2*PI-swingPhase);
 
     x = startX - direction * (-ellipseWidth * 0.5 + ellipseWidth * (t * 0.9)); // reduce torque
-    y = startY + 10.0 * sin(t * PI);
+    //y = startY + 10.0 * sin(t * PI);
+    y = startY + sin(t*PI);
   }
 
   // IK (loc)
