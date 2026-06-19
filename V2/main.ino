@@ -23,12 +23,12 @@ Servo kneeBR;
 #define joy_mode 21
 
 // Offsets for forwards and turning
-float hipOffsetF = 45;
-float kneeOffsetF = 30;
+float hipOffsetF = 50;
+float kneeOffsetF = 10;
 
 // Offsets for backwards
 float hipOffsetB = 45;
-float kneeOffsetB = 30;
+float kneeOffsetB = 20;
 
 // Offsets for strafing
 float hipOffsetS = 40; // OLD: 45
@@ -46,8 +46,8 @@ const float r2d = 57.2957795; // Rad to deg
 float timeStep = 0.0;
 float stepSpeed; // Gait speed
 
-float ellipseWidth = 115.0; // Step length
-float ellipseHeight = 15.0; // How high foot lifts
+float ellipseWidth; // Step length
+float ellipseHeight; // How high foot lifts
 
 const float startX = 0.0; // Center X
 const float startZ = -150.0;
@@ -156,12 +156,12 @@ void loop() {
   filteredMode = 0.9 * filteredMode + 0.1 * rawMode;
   int mode = (int)filteredMode;
 
-  bool forward = (t < 1450);
-  bool backward = (t > 1550);
-  bool turnLeft = (turn < 1400);
-  bool turnRight = (turn > 1600);
-  bool strafeLeft = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
-  bool strafeRight = (strafe < 1350);
+  bool backward = (t < 1450);
+  bool forward = (t > 1550);
+  bool turnRight = (turn < 1400);
+  bool turnLeft = (turn > 1600);
+  bool strafeRight = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
+  bool strafeLeft = (strafe < 1350);
   bool obstacleMode = mode > 1500;
   // bool poseMode = mode > 1500;
 
@@ -171,15 +171,15 @@ void loop() {
     // Speed logic
     if (forward || backward) {
       if (forward) {
-        stepSpeed = 1.0f + (throttleMag / 450.0f) * 0.8f;
+        stepSpeed = 1.2f + (throttleMag / 450.0f) * 0.8f;
       } else {
-        stepSpeed = 0.9f + (throttleMag / 450.0f) * 0.5f;
+        stepSpeed = 1.2f + (throttleMag / 450.0f) * 1.0f;
       }
     } else if (strafeLeft || strafeRight) {
-      stepSpeed = 1.0f + (strafeMag / 350.0f) * 0.6f;
+      stepSpeed = 1.5f + (strafeMag / 350.0f) * 1.0f;
     }
 
-    stepSpeed = constrain(stepSpeed, 0.9f, 1.8f);
+    stepSpeed = constrain(stepSpeed, 1.2f, 2.5f);
 
     timeStep += stepSpeed * TWO_PI * dt;
 
@@ -199,8 +199,8 @@ void loop() {
     int dirBL = 0;
     int dirBR = 0;
 
-    ellipseHeight = 15;
-    ellipseWidth = 115;
+    ellipseHeight = 90;
+    ellipseWidth = 90;
     //stepSpeed = 1.2;
 
     float strideFL = 1;
@@ -272,7 +272,7 @@ void loop() {
     if (moveDir != 0 && (turnLeft || turnRight)) {
       //stepSpeed = 2.0;
 
-      float innerStride = 0.3;
+      float innerStride = 0.5;
       float outerStride = 1;
 
       bool leftInner;
@@ -295,18 +295,18 @@ void loop() {
 
       float strafeDir = strafeLeft ? -1.0f : 1.0f;
 
-      latFL = strafeDir * 20.0 * sin(timeStep + PHASE_FL);
-      latFR = strafeDir * 20.0 * sin(timeStep + PHASE_FR);
-      latBL = strafeDir * 20.0 * sin(timeStep + PHASE_BL);
-      latBR = strafeDir * 20.0 * sin(timeStep + PHASE_BR);
+      latFL = strafeDir * 25.0 * sin(timeStep + PHASE_FL);
+      latFR = strafeDir * 25.0 * sin(timeStep + PHASE_FR);
+      latBL = strafeDir * 25.0 * sin(timeStep + PHASE_BL);
+      latBR = strafeDir * 25.0 * sin(timeStep + PHASE_BR);
     }
 
     if (moveDir == 0 && (turnLeft || turnRight)) {
-      ellipseHeight = 20;
+      //ellipseHeight = 20;
       stepSpeed = 2;
 
       float turnDir = turnLeft ? -1.0f : 1.0f;
-      float amp = 20.0f;
+      float amp = 30.0f;
 
       latFL = -turnDir * amp * sin(timeStep + PHASE_FL);
       latBL = -turnDir * amp * sin(timeStep + PHASE_BL);
@@ -379,7 +379,7 @@ void moveLeg(Servo& abd, Servo& hip, Servo& knee, float phase, int direction, fl
   if (phaseNorm < swingPhase) {
     float t = phaseNorm / swingPhase;
 
-    x = startX + direction * ellipseWidth * strideScale * (0.5 - t);
+    x = startX - direction * ellipseWidth * strideScale * (0.5 - t);
 
     /*
     if (t < 0.5) {
@@ -388,14 +388,14 @@ void moveLeg(Servo& abd, Servo& hip, Servo& knee, float phase, int direction, fl
     else {
       z = startZ + ellipseHeight;
     }*/
-    z = startZ + ellipseHeight * sin(t * PI);
+    z = startZ - ellipseHeight * sin(t * PI);
 
   } else {
     float t = (phaseNorm - swingPhase) / (2*PI-swingPhase);
 
-    x = startX + direction * (-ellipseWidth * 0.5 + ellipseWidth * t) * strideScale;
-    z = startZ - 15.0 * sin(t * PI); // NEEDED to generate friction
-    //z = startZ;
+    x = startX - direction * (-ellipseWidth * 0.5 + ellipseWidth * t) * strideScale;
+    //z = startZ - 15.0 * sin(t * PI); // NEEDED to generate friction
+    z = startZ;
   }
 
   // Strafe foot target
