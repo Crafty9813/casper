@@ -2,8 +2,8 @@
 #include <math.h>
 #include <NewPing.h>
 
-#define trig_pin 12
-#define echo_pin 11
+#define trig_pin 2
+#define echo_pin 3
 
 NewPing sonar(trig_pin, echo_pin, 400);
 
@@ -77,10 +77,10 @@ float filteredMode = 1000;
 
 bool isIdle = true;
 
-const float PHASE_FL = 0.0;
-const float PHASE_FR = PI;
-const float PHASE_BR = 0.0;
-const float PHASE_BL = PI;
+float PHASE_FL;
+float PHASE_FR;
+float PHASE_BR;
+float PHASE_BL;
 
 const float swingPhase = PI;
 
@@ -101,6 +101,7 @@ int lastHipBR = 90;
 int lastKneeBR = 90;
 
 void setup() {
+  //Serial.begin(115200);
   abFL.attach(10);
   hipFL.attach(9);
   kneeFL.attach(8);
@@ -133,6 +134,7 @@ static uint32_t prevTime = micros();
 unsigned long obsModeTo = 0;
 
 void loop() {
+  //Serial.println(sonar.ping_cm());
   uint32_t now = micros();
   float dt = (now - prevTime) / 1000000.0f; // Time elapsed
   prevTime = now;
@@ -169,7 +171,7 @@ void loop() {
   bool turnLeft = (turn > 1600);
   bool strafeRight = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
   bool strafeLeft = (strafe < 1350);
-  bool obsDetected = sonar.ping_cm() < 20;
+  bool obsDetected = sonar.ping_cm() < 40;
   // bool poseMode = mode > 1500;
 
   if (obsDetected) {
@@ -211,6 +213,11 @@ void loop() {
     int dirFR = 0;
     int dirBL = 0;
     int dirBR = 0;
+
+    PHASE_FL = 0.0;
+    PHASE_FR = PI;
+    PHASE_BR = 0.0;
+    PHASE_BL = PI;
 
     ellipseHeight = 90;
     ellipseWidth = 90;
@@ -327,10 +334,15 @@ void loop() {
       latBR = turnDir * amp * sin(timeStep + PHASE_BR);
     }
 
-    if (obstacleMode) {
-      ellipseHeight = 100;
+    if (obsMode) {
+      ellipseHeight = 120;
       ellipseWidth = 30;
       stepSpeed = 0.4;
+
+      PHASE_FL = 0.0;
+      PHASE_FR = PI;
+      PHASE_BR = 0.5 * PI;
+      PHASE_BL = 1.5 * PI;
       //hipOffsetF = 52;
       //kneeOffsetF = 40;
     }
