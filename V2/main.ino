@@ -1,5 +1,11 @@
 #include <Servo.h>
 #include <math.h>
+#include <NewPing.h>
+
+#define trig_pin 12
+#define echo_pin 11
+
+NewPing sonar(trig_pin, echo_pin, 400);
 
 Servo abFL;
 Servo hipFL;
@@ -124,6 +130,7 @@ void setup() {
 }
 
 static uint32_t prevTime = micros();
+unsigned long obsModeTo = 0;
 
 void loop() {
   uint32_t now = micros();
@@ -162,8 +169,14 @@ void loop() {
   bool turnLeft = (turn > 1600);
   bool strafeRight = (strafe > 1650); // Since my transmitter doesn't have self-centered throttle more deadband needed
   bool strafeLeft = (strafe < 1350);
-  bool obstacleMode = mode > 1500;
+  bool obsDetected = sonar.ping_cm() < 20;
   // bool poseMode = mode > 1500;
+
+  if (obsDetected) {
+    obsModeTo = millis() + 5000; // 5 sec time period to go over obstacle
+  }
+
+  bool obsMode = millis() < obsModeTo;
 
   if (forward || backward || turnLeft || turnRight || strafeLeft || strafeRight) {
     isIdle = false;
@@ -309,8 +322,8 @@ void loop() {
       float amp = 30.0f;
 
       latFL = -turnDir * amp * sin(timeStep + PHASE_FL);
-      latBL = -turnDir * amp * sin(timeStep + PHASE_BL);
-      latFR = turnDir * amp * sin(timeStep + PHASE_FR);
+      latBL = turnDir * amp * sin(timeStep + PHASE_BL);
+      latFR = -turnDir * amp * sin(timeStep + PHASE_FR);
       latBR = turnDir * amp * sin(timeStep + PHASE_BR);
     }
 
