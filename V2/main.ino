@@ -1,6 +1,9 @@
 #include <Servo.h>
 #include <math.h>
 #include <NewPing.h>
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(39, 38, 40, 41, 42, 43);
 
 #define trig_pin 2
 #define echo_pin 3
@@ -101,6 +104,11 @@ int lastHipBR = 90;
 int lastKneeBR = 90;
 
 void setup() {
+  lcd.begin(16, 2);
+  lcd.setCursor(0, 0);
+  lcd.print("Casper V2! :D");
+  lcd.setCursor(0, 1);
+  lcd.print("By Jonathan Li");
   //Serial.begin(115200);
   abFL.attach(10);
   hipFL.attach(9);
